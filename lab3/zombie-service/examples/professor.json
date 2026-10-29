@@ -1,0 +1,12 @@
+{
+  "type_id": "professor_zombie",
+  "name": "Professor Zombie",
+  "health": 120,
+  "damage": 20,
+  "speed": 1.0,
+  "loot_table_id": "loot-professor-01",
+  "behaviours": [
+    { "trigger": "player_nearby", "action": "start_exam", "range_tiles": 3 },
+    { "trigger": "day_phase", "action": "hide", "location": "exam_hall" }
+  ]
+}

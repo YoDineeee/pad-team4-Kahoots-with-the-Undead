@@ -1,42 +1,179 @@
-# Grade 4: 3 replicas of orders, 2 of users. No fixed ports / container_name on replicas:
-# each replica gets its own container + IP and registers itself with Service Discovery.
+# Runs the whole system. Start with:  python run.py docker   (or: docker compose up --build)
+# Secrets come from the .env file (copy .env.example -> .env). Never commit .env!
+#
+# The GATEWAY is the single point of entry for clients (port 8080). The SERVICE DISCOVERY (port 8761)
+# is published too, only so you can look at the registry from your browser.
+# Every other service is reachable only INSIDE the compose network.
+#
+# Lab 3 - scaling up:
+#   - every service registers itself with the Service Discovery on startup and sends a heartbeat every 10 s
+#   - the gateway asks the Service Discovery which instances exist and spreads the requests over them
+#     (round robin); a circuit breaker logs an ERROR after 3 errors of one instance in UPSTREAM_TIMEOUT_MS * 3.5
+#   - zombie-service and resource-service run as several REPLICAS (their data is in PostgreSQL, so any
+#     instance can answer any request). Change the number on the fly, no restart needed:
+#         docker compose up -d --scale zombie-service=2 --no-recreate
+#   - player, game, base and crafting keep their data IN MEMORY, so they stay at ONE instance
+#     (a second copy would not know the players/lobbies/bases created on the first one)
+#
+#   gateway (Node)  ->  player-service, game-service             (Java 21, in memory, 1 instance)
+#                   ->  zombie-service x3, resource-service x3   (Java 17, PostgreSQL, scaled)
+#                   ->  base-service, crafting-service           (Python / Flask, in memory, 1 instance)
+#   service-discovery (Node) <- every service registers here
+
+# The same variable for every service: where to register.
+x-discovery: &discovery
+  SERVICE_DISCOVERY_URL: http://service-discovery:8761
+
 services:
+  # ---------------------------------------------------------------- lab 3: service discovery
   service-discovery:
-    build: ./service-discovery        # or: image: <dockerhub-user>/service-discovery
-    ports: ["8500:8500"]
+    build: ./service-discovery
+    image: ${DOCKERHUB_USER:-local}/service-discovery:${VERSION:-1.0.0}
+    container_name: service-discovery
+    ports:
+      - "8761:8761"     # so you can open http://localhost:8761/services in the browser
     environment:
-      HEALTH_INTERVAL_S: "10"
-      LOAD_THRESHOLD_PCT: "80"
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      PORT: 8761
+      INSTANCE_TTL_MS: 30000   # no heartbeat for 30 s -> the instance is removed
 
+  # ---------------------------------------------------------------- gateway
   gateway:
-    build: { context: ., dockerfile: gateway/Dockerfile }
-    ports: ["8080:8080"]
+    build: ./gateway
+    image: ${DOCKERHUB_USER:-local}/gateway:${VERSION:-1.0.0}
+    container_name: gateway
+    ports:
+      - "8080:8080"
     environment:
-      SD_URL: http://service-discovery:8500
-      TASK_TIMEOUT: "5"
-      BREAKER_MODE: ${BREAKER_MODE:-remove}     # "log" = grade 6, "remove" = grade 9
-    depends_on: [service-discovery]
+      PORT: 8080
+      SERVICE_DISCOVERY_URL: http://service-discovery:8761
+      SELF_URL: http://gateway:8080          # the gateway registers itself too
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-10000}   # circuit breaker window = 3.5 x this
+    depends_on:
+      - service-discovery
 
-  orders:
-    build: { context: ., dockerfile: service/Dockerfile }
-    deploy: { replicas: 3 }
+  # ---------------------------------------------------------------- players and games (in memory -> 1 instance)
+  player-service:
+    build: ./player-service
+    image: ${DOCKERHUB_USER:-local}/player-service:${VERSION:-1.0.0}
+    expose:
+      - "8081"          # visible to other containers only
     environment:
-      SERVICE_NAME: orders
-      PEER_SERVICE: users
-      SD_URL: http://service-discovery:8500
-      BREAKER_MODE: ${BREAKER_MODE:-remove}
-    depends_on: [service-discovery]
+      <<: *discovery
+      JWT_SECRET: "${JWT_SECRET:?Missing JWT_SECRET in .env - see .env.example}"
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
+    depends_on:
+      - service-discovery
 
-  users:
-    build: { context: ., dockerfile: service/Dockerfile }
-    deploy: { replicas: 2 }
+  game-service:
+    build: ./game-service
+    image: ${DOCKERHUB_USER:-local}/game-service:${VERSION:-1.0.0}
+    expose:
+      - "8082"
     environment:
-      SERVICE_NAME: users
-      PEER_SERVICE: orders
-      SD_URL: http://service-discovery:8500
-      BREAKER_MODE: ${BREAKER_MODE:-remove}
-    depends_on: [service-discovery]
-    
+      <<: *discovery
+      JWT_SECRET: "${JWT_SECRET:?Missing JWT_SECRET in .env - see .env.example}"   # same secret -> trusts Player Service tokens
+      GAME_MIN_PLAYERS_TO_START: ${GAME_MIN_PLAYERS_TO_START:-2}
+    depends_on:
+      - service-discovery
+
+  # ---------------------------------------------------------------- zombies and resources (PostgreSQL -> scaled)
+  zombie-db:
+    image: postgres:17
+    container_name: zombie-db
+    environment:
+      POSTGRES_DB: zombies
+      POSTGRES_USER: "${ZOMBIE_DB_USER:?Missing ZOMBIE_DB_USER in .env - see .env.example}"
+      POSTGRES_PASSWORD: "${ZOMBIE_DB_PASSWORD:?Missing ZOMBIE_DB_PASSWORD in .env - see .env.example}"
+    volumes:
+      - zombie-db-data:/var/lib/postgresql/data     # data survives restarts and "docker compose down"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d zombies"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  zombie-service:
+    build: ./zombie-service
+    image: ${DOCKERHUB_USER:-local}/zombie-service:${ZOMBIE_VERSION:-1.1.0}
+    # no container_name: replicas need different names (pad-lab_2-zombie-service-1, -2, -3)
+    deploy:
+      replicas: ${ZOMBIE_REPLICAS:-3}
+    expose:
+      - "8081"
+    environment:
+      <<: *discovery
+      DB_URL: jdbc:postgresql://zombie-db:5432/zombies
+      DB_USER: "${ZOMBIE_DB_USER}"
+      DB_PASSWORD: "${ZOMBIE_DB_PASSWORD}"
+      JAVA_TOOL_OPTIONS: "-Xmx384m"      # several JVMs on one laptop: keep each one small
+    depends_on:
+      zombie-db:
+        condition: service_healthy
+      service-discovery:
+        condition: service_started
+
+  resource-db:
+    image: postgres:17
+    container_name: resource-db
+    environment:
+      POSTGRES_DB: resources
+      POSTGRES_USER: "${RESOURCE_DB_USER:?Missing RESOURCE_DB_USER in .env - see .env.example}"
+      POSTGRES_PASSWORD: "${RESOURCE_DB_PASSWORD:?Missing RESOURCE_DB_PASSWORD in .env - see .env.example}"
+    volumes:
+      - resource-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d resources"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  resource-service:
+    build: ./resource-service
+    image: ${DOCKERHUB_USER:-local}/resource-service:${RESOURCE_VERSION:-1.1.0}
+    deploy:
+      replicas: ${RESOURCE_REPLICAS:-3}
+    expose:
+      - "8082"
+    environment:
+      <<: *discovery
+      DB_URL: jdbc:postgresql://resource-db:5432/resources
+      DB_USER: "${RESOURCE_DB_USER}"
+      DB_PASSWORD: "${RESOURCE_DB_PASSWORD}"
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
+    depends_on:
+      resource-db:
+        condition: service_healthy
+      service-discovery:
+        condition: service_started
+
+  # ---------------------------------------------------------------- base and crafting (Python, in memory -> 1 instance)
+  base-service:
+    build: ./base-service
+    image: ${DOCKERHUB_USER:-local}/base-service:${BASE_VERSION:-1.0.0}
+    expose:
+      - "5007"
+    environment:
+      <<: *discovery
+      PORT: 5007
+      FLASK_DEBUG: "0"
+    depends_on:
+      - service-discovery
+
+  crafting-service:
+    build: ./crafting-service
+    image: ${DOCKERHUB_USER:-local}/crafting-service:${CRAFTING_VERSION:-1.0.0}
+    expose:
+      - "5008"
+    environment:
+      <<: *discovery
+      PORT: 5008
+      FLASK_DEBUG: "0"
+    depends_on:
+      - service-discovery
+
+volumes:
+  # Docker prefixes these with the project name (pad-lab_2_zombie-db-data), so they are separate
+  # from the volumes lab-services/ creates when it runs on its own.
+  zombie-db-data:
+  resource-db-data:
+  

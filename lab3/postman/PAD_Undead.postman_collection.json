@@ -1,0 +1,2607 @@
+{
+  "info": {
+    "name": "PAD - In Kahoots with the Undead (via Gateway)",
+    "description": "All requests go through the Gateway on port 8080 (the single point of entry). Run the whole collection top-to-bottom (Collection Runner). Each request saves the ids it creates into collection variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Gateway",
+      "item": [
+        {
+          "name": "Gateway info (routing table)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway_url}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health of all services",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway_url}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"All services UP\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Six services reported\", () => {",
+                  "  const s = pm.response.json().services;",
+                  "  [\"player-service\",\"game-service\",\"zombie-service\",\"resource-service\",\"base-service\",\"crafting-service\"].forEach(n => pm.expect(s[n]).to.eql(\"UP\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown route -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway_url}}/api/unknown"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lab 3 - Scaling (Service Discovery, round robin, circuit breaker)",
+      "item": [
+        {
+          "name": "Service Discovery: registered instances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{sd_url}}/services"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "pm.test(\"Every service registered\", () => {",
+                  "  [\"gateway\",\"player-service\",\"game-service\",\"zombie-service\",\"resource-service\",\"base-service\",\"crafting-service\"].forEach(n => pm.expect(s[n], n).to.be.an(\"array\").that.is.not.empty);",
+                  "});",
+                  "pm.test(\"zombie-service runs several instances\", () => pm.expect(s[\"zombie-service\"].length).to.be.above(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Service Discovery: status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{sd_url}}/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Instances registered\", () => pm.expect(pm.response.json().registered_instances).to.be.above(6));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Round robin 1/3",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway_url}}/api/zombies/types"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"rr_1\", pm.response.headers.get(\"X-Instance-Id\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Round robin 2/3",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway_url}}/api/zombies/types"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"rr_2\", pm.response.headers.get(\"X-Instance-Id\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Round robin 3/3 (different instances answered)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway_url}}/api/zombies/types"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const ids = [pm.collectionVariables.get(\"rr_1\"), pm.collectionVariables.get(\"rr_2\"), pm.response.headers.get(\"X-Instance-Id\")];",
+                  "console.log(\"served by\", ids);",
+                  "pm.test(\"Requests were spread over more than one instance\", () => pm.expect(new Set(ids).size).to.be.above(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gateway status (instances, round robin, circuit breaker)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gateway_url}}/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"Knows several zombie-service instances\", () => pm.expect(b.instances[\"zombie-service\"].length).to.be.above(1));",
+                  "pm.test(\"Circuit breaker: 3 errors in timeout * 3.5\", () => {",
+                  "  pm.expect(b.circuit_breaker.max_failures).to.eql(3);",
+                  "  pm.expect(b.circuit_breaker.window_ms).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Player Service",
+      "item": [
+        {
+          "name": "Register player 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"survivor_{{suffix}}\",\n  \"email\": \"survivor_{{suffix}}@faf.university\",\n  \"password\": \"secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"player1_id\", pm.response.json().player_id);",
+                  "pm.test(\"Starts at level 1\", () => pm.expect(pm.response.json().level).to.eql(1));"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"suffix\", Date.now().toString().slice(-6));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register player 2 (kiki)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"kiki_{{suffix}}\",\n  \"email\": \"kiki_{{suffix}}@faf.university\",\n  \"password\": \"secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"player2_id\", pm.response.json().player_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register duplicate email -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"someone_else_{{suffix}}\",\n  \"email\": \"survivor_{{suffix}}@faf.university\",\n  \"password\": \"secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login player 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"survivor_{{suffix}}@faf.university\",\n  \"password\": \"secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"jwt1\", pm.response.json().jwt);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login player 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"kiki_{{suffix}}@faf.university\",\n  \"password\": \"secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"jwt2\", pm.response.json().jwt);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login wrong password -> 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"kiki_{{suffix}}@faf.university\",\n  \"password\": \"nope\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get player profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get profile without JWT -> 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update player profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Pumpkin Slayer\",\n  \"avatar\": \"axe_wielding\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Title changed\", () => pm.expect(pm.response.json().title).to.eql(\"Pumpkin Slayer\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update someone else's profile -> 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player2_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Hacked\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get XP",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/xp"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update XP (+250, exam passed)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/xp",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operation_id\": \"{{xp_op_id}}\",\n  \"delta\": 250,\n  \"reason\": \"EXAM_PASSED\",\n  \"source_service\": \"exam-service\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"xp_after\", pm.response.json().xp);"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"xp_op_id\", \"xp-op-\" + Date.now());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update XP again with SAME operation_id (idempotent)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/xp",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operation_id\": \"{{xp_op_id}}\",\n  \"delta\": 250,\n  \"reason\": \"EXAM_PASSED\",\n  \"source_service\": \"exam-service\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"XP was NOT added twice\", () => pm.expect(pm.response.json().xp).to.eql(Number(pm.collectionVariables.get(\"xp_after\"))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get player inventory",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/inventory"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "const coffee = pm.response.json().find(i => i.code === \"COFFEE\");",
+                  "pm.collectionVariables.set(\"coffee_item_id\", coffee.item_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add item to inventory [internal]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/inventory",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operation_id\": \"grant-{{$guid}}\",\n  \"code\": \"ZOMBIE_DETECTOR\",\n  \"type\": \"equipment\",\n  \"quantity\": 1,\n  \"source\": \"crafting-service\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consume a coffee (delta -1)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/inventory/{{coffee_item_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operation_id\": \"consume-{{$guid}}\",\n  \"delta\": -1,\n  \"reason\": \"CONSUMED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"2 coffees left\", () => pm.expect(pm.response.json().quantity).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consume too many -> 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/inventory/{{coffee_item_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operation_id\": \"consume-{{$guid}}\",\n  \"delta\": -99,\n  \"reason\": \"CONSUMED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add friend",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/friends",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_player_id\": \"{{player2_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"friendship_id\", pm.response.json().friendship_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get friends list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/friends"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"kiki is in the list\", () => pm.expect(pm.response.json().length).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove friend",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player1_id}}/friends/{{friendship_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Game Service",
+      "item": [
+        {
+          "name": "Create lobby",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{game_url}}/api/game/lobbies",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"host_id\": \"{{player1_id}}\",\n  \"university\": \"FAF\",\n  \"max_players\": 8,\n  \"name\": \"Cab Survivors\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"lobby_id\", pm.response.json().lobby_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start session with 1 player -> 409 NOT_ENOUGH_PLAYERS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{game_url}}/api/lobbies/{{lobby_id}}/start",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycle_duration_seconds\": 300,\n  \"semester_length_cycles\": 14\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Join lobby (player 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt2}}"
+              }
+            ],
+            "url": "{{game_url}}/api/game/lobbies/{{lobby_id}}/join",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player_id\": \"{{player2_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"2 players\", () => pm.expect(pm.response.json().players.length).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get lobby",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{game_url}}/api/game/lobbies/{{lobby_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start session as non-host -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt2}}"
+              }
+            ],
+            "url": "{{game_url}}/api/lobbies/{{lobby_id}}/start",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycle_duration_seconds\": 300,\n  \"semester_length_cycles\": 14\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start session (host)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{game_url}}/api/lobbies/{{lobby_id}}/start",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycle_duration_seconds\": 300,\n  \"semester_length_cycles\": 14\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"session_id\", pm.response.json().session_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get session state",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{game_url}}/api/sessions/{{session_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start timed action (chop bench 10 s)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{game_url}}/api/game/lobbies/{{lobby_id}}/actions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player_id\": \"{{player1_id}}\",\n  \"action_type\": \"chop_bench\",\n  \"target\": \"bench-room-A1\",\n  \"duration_seconds\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 202\", () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set(\"action_id\", pm.response.json().action_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start second action -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{game_url}}/api/game/lobbies/{{lobby_id}}/actions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player_id\": \"{{player1_id}}\",\n  \"action_type\": \"scavenge_canteen\",\n  \"target\": \"canteen\",\n  \"duration_seconds\": 300\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get action status (run again after 10 s to see the reward)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{game_url}}/api/sessions/{{session_id}}/actions/{{action_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start long action (player 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt2}}"
+              }
+            ],
+            "url": "{{game_url}}/api/game/lobbies/{{lobby_id}}/actions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player_id\": \"{{player2_id}}\",\n  \"action_type\": \"scavenge_canteen\",\n  \"target\": \"canteen\",\n  \"duration_seconds\": 300\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 202\", () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set(\"action2_id\", pm.response.json().action_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel action",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt2}}"
+              }
+            ],
+            "url": "{{game_url}}/api/game/actions/{{action2_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "End session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{game_url}}/api/sessions/{{session_id}}/end"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Finished\", () => pm.expect(pm.response.json().status).to.eql(\"FINISHED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Leave lobby (player 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt2}}"
+              }
+            ],
+            "url": "{{game_url}}/api/game/lobbies/{{lobby_id}}/leave",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"player_id\": \"{{player2_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Zombie Service",
+      "item": [
+        {
+          "name": "Create Tourist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{zombie_url}}/api/zombies/types",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_id\": \"tourist_zombie\",\n  \"name\": \"Tourist Zombie\",\n  \"health\": 80,\n  \"damage\": 12,\n  \"speed\": 1.5,\n  \"loot_table_id\": \"loot-tourist-01\",\n  \"behaviours\": [\n    {\n      \"trigger\": \"player_nearby\",\n      \"action\": \"chase\",\n      \"range_tiles\": 5\n    },\n    {\n      \"trigger\": \"day_phase\",\n      \"action\": \"hide\",\n      \"location\": \"exam_hall\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set(\"type_id\", pm.response.json().type_id);",
+                  "pm.test(\"Served by zombie-service\", () => pm.expect(pm.response.headers.get(\"X-Served-By\")).to.eql(\"zombie-service\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{zombie_url}}/api/zombies/types",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_id\": \"tourist_zombie\",\n  \"name\": \"Tourist Zombie\",\n  \"health\": 80,\n  \"damage\": 12,\n  \"speed\": 1.5,\n  \"loot_table_id\": \"loot-tourist-01\",\n  \"behaviours\": [\n    {\n      \"trigger\": \"player_nearby\",\n      \"action\": \"chase\",\n      \"range_tiles\": 5\n    },\n    {\n      \"trigger\": \"day_phase\",\n      \"action\": \"hide\",\n      \"location\": \"exam_hall\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{zombie_url}}/api/zombies/types"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retrieve Tourist",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{zombie_url}}/api/zombies/types/{{type_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch health and replace behaviours",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{zombie_url}}/api/zombies/types/{{type_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"health\": 95,\n  \"behaviours\": [\n    {\n      \"trigger\": \"player_nearby\",\n      \"action\": \"chase\",\n      \"range_tiles\": 6\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify update and preserved fields",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{zombie_url}}/api/zombies/types/{{type_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Health changed, damage kept, behaviours replaced\", () => {",
+                  "  const z = pm.response.json();",
+                  "  pm.expect(z.health).to.eql(95);",
+                  "  pm.expect(z.damage).to.eql(12);",
+                  "  pm.expect(z.behaviours.length).to.eql(1);",
+                  "  pm.expect(z.behaviours[0].range_tiles).to.eql(6);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject negative health",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{zombie_url}}/api/zombies/types/{{type_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"health\": -1\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Tourist",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{zombie_url}}/api/zombies/types/{{type_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deleted type is missing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{zombie_url}}/api/zombies/types/{{type_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Resource Service",
+      "item": [
+        {
+          "name": "Create point and capture ID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{resource_url}}/api/resources/points",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_id\": \"lab-204\",\n  \"resource\": \"metal-01\",\n  \"amount\": 10,\n  \"max_amount\": 30\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set(\"point_id\", pm.response.json().point_id);",
+                  "pm.test(\"Served by resource-service\", () => pm.expect(pm.response.headers.get(\"X-Served-By\")).to.eql(\"resource-service\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List points",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{resource_url}}/api/resources/points"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter room",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{resource_url}}/api/resources/points?room_id=lab-204"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter resource",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{resource_url}}/api/resources/points?resource=metal-01"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter both",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{resource_url}}/api/resources/points?room_id=lab-204&resource=metal-01"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retrieve point",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{resource_url}}/api/resources/points/{{point_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Increase capacity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{resource_url}}/api/resources/points/{{point_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"max_amount\": 50\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify update and preserved amount",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{resource_url}}/api/resources/points/{{point_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Preserved values\", () => { const p=pm.response.json(); pm.expect(p.max_amount).to.eql(50); pm.expect(p.amount).to.eql(10); pm.expect(p.resource).to.eql(\"metal-01\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject capacity below amount",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{resource_url}}/api/resources/points/{{point_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"max_amount\": 5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject amount update through point PATCH",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{resource_url}}/api/resources/points/{{point_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject invalid creation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{resource_url}}/api/resources/points",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_id\": \"lab-204\",\n  \"resource\": \"metal-01\",\n  \"amount\": 10,\n  \"max_amount\": 5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete point",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{resource_url}}/api/resources/points/{{point_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deleted point is missing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{resource_url}}/api/resources/points/{{point_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Base Service",
+      "description": "Python/Flask service behind the gateway. Demo tokens: service-token, moderator-token, anything else = player.",
+      "item": [
+        {
+          "name": "Create base (service token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer service-token"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/bases",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-{{$guid}}\",\n  \"lobby_id\": \"lobby-{{$guid}}\",\n  \"map_id\": \"map-uuid-001\",\n  \"home_room_id\": \"faf-cab\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Served by base-service\", () => pm.expect(pm.response.headers.get(\"X-Served-By\")).to.eql(\"base-service\"));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set(\"base_id\", pm.response.json().base_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing token -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/bases/{{base_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Player cannot delete -> 403",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get base",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Home room is faf-cab\", () => pm.expect(pm.response.json().rooms[0].room_id).to.eql(\"faf-cab\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename base",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fortress Cab\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Renamed\", () => pm.expect(pm.response.json().name).to.eql(\"Fortress Cab\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Annex lab-a1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer service-token"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}/rooms",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-{{$guid}}\",\n  \"room_id\": \"lab-a1\",\n  \"player_id\": \"player-uuid-123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List rooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}/rooms"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Build barricade",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer service-token"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}/rooms/lab-a1/barricade",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-{{$guid}}\",\n  \"player_id\": \"player-uuid-123\",\n  \"kit_item_id\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Zombie damage",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer service-token"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}/rooms/lab-a1/barricade",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-{{$guid}}\",\n  \"operation\": \"damage\",\n  \"amount\": 30\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get barricade",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}/rooms/lab-a1/barricade"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete base",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer service-token"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Deleted\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deleted base is missing",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{base_url}}/api/bases/{{base_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Crafting Service",
+      "description": "Python/Flask service behind the gateway. Data is in memory: restart the container to reset the seed materials.",
+      "item": [
+        {
+          "name": "List recipes for a player",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{crafting_url}}/api/crafting/recipes?player_id=player-uuid-123"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Served by crafting-service\", () => pm.expect(pm.response.headers.get(\"X-Served-By\")).to.eql(\"crafting-service\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get recipe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{crafting_url}}/api/crafting/recipes/barricade_kit"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recipes the player can craft",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{crafting_url}}/api/crafting/players/player-uuid-123/recipes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Craft a barricade kit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{crafting_url}}/api/crafting/jobs",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-{{$guid}}\",\n  \"player_id\": \"player-uuid-123\",\n  \"recipe_id\": \"barricade_kit\",\n  \"quantity\": 1,\n  \"base_id\": \"base-uuid-001\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set(\"job_id\", pm.response.json().job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{crafting_url}}/api/crafting/jobs/{{job_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Completed\", () => pm.expect(pm.response.json().status).to.eql(\"completed\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              }
+            ],
+            "url": "{{crafting_url}}/api/crafting/jobs?player_id=player-uuid-123&status=completed"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Locked recipe -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{crafting_url}}/api/crafting/jobs",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-{{$guid}}\",\n  \"player_id\": \"player-uuid-123\",\n  \"recipe_id\": \"exam_cheat_sheet\",\n  \"quantity\": 1\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Player cannot create recipes -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer player-token"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{crafting_url}}/api/crafting/recipes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipe_id\": \"x\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "item": [
+        {
+          "name": "Delete player 2",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt2}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player2_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deleted player is gone -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt1}}"
+              }
+            ],
+            "url": "{{player_url}}/api/players/{{player2_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "gateway_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "player_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "game_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "suffix",
+      "value": ""
+    },
+    {
+      "key": "player1_id",
+      "value": ""
+    },
+    {
+      "key": "player2_id",
+      "value": ""
+    },
+    {
+      "key": "jwt1",
+      "value": ""
+    },
+    {
+      "key": "jwt2",
+      "value": ""
+    },
+    {
+      "key": "xp_op_id",
+      "value": ""
+    },
+    {
+      "key": "xp_after",
+      "value": ""
+    },
+    {
+      "key": "coffee_item_id",
+      "value": ""
+    },
+    {
+      "key": "friendship_id",
+      "value": ""
+    },
+    {
+      "key": "lobby_id",
+      "value": ""
+    },
+    {
+      "key": "session_id",
+      "value": ""
+    },
+    {
+      "key": "action_id",
+      "value": ""
+    },
+    {
+      "key": "action2_id",
+      "value": ""
+    },
+    {
+      "key": "zombie_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "resource_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "crafting_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "type_id",
+      "value": "tourist_zombie"
+    },
+    {
+      "key": "point_id",
+      "value": ""
+    },
+    {
+      "key": "base_id",
+      "value": ""
+    },
+    {
+      "key": "job_id",
+      "value": ""
+    },
+    {
+      "key": "sd_url",
+      "value": "http://localhost:8761"
+    },
+    {
+      "key": "rr_1",
+      "value": ""
+    },
+    {
+      "key": "rr_2",
+      "value": ""
+    }
+  ]
+}
