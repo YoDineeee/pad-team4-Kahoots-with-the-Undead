@@ -1,0 +1,42 @@
+# Grade 4: 3 replicas of orders, 2 of users. No fixed ports / container_name on replicas:
+# each replica gets its own container + IP and registers itself with Service Discovery.
+services:
+  service-discovery:
+    build: ./service-discovery        # or: image: <dockerhub-user>/service-discovery
+    ports: ["8500:8500"]
+    environment:
+      HEALTH_INTERVAL_S: "10"
+      LOAD_THRESHOLD_PCT: "80"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+
+  gateway:
+    build: { context: ., dockerfile: gateway/Dockerfile }
+    ports: ["8080:8080"]
+    environment:
+      SD_URL: http://service-discovery:8500
+      TASK_TIMEOUT: "5"
+      BREAKER_MODE: ${BREAKER_MODE:-remove}     # "log" = grade 6, "remove" = grade 9
+    depends_on: [service-discovery]
+
+  orders:
+    build: { context: ., dockerfile: service/Dockerfile }
+    deploy: { replicas: 3 }
+    environment:
+      SERVICE_NAME: orders
+      PEER_SERVICE: users
+      SD_URL: http://service-discovery:8500
+      BREAKER_MODE: ${BREAKER_MODE:-remove}
+    depends_on: [service-discovery]
+
+  users:
+    build: { context: ., dockerfile: service/Dockerfile }
+    deploy: { replicas: 2 }
+    environment:
+      SERVICE_NAME: users
+      PEER_SERVICE: orders
+      SD_URL: http://service-discovery:8500
+      BREAKER_MODE: ${BREAKER_MODE:-remove}
+    depends_on: [service-discovery]
+    
