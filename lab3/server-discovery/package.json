@@ -1,0 +1,9 @@
+{
+  "name": "service-discovery",
+  "version": "1.0.0",
+  "description": "Service registry, health poller and alert notifier for the CPR backend",
+  "main": "index.js",
+  "scripts": { "start": "node index.js", "test": "node --test" },
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}
