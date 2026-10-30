@@ -26,6 +26,7 @@ import time
 import urllib.request
 import uuid
 
+import psutil
 from flask import g, has_request_context, jsonify, request
 
 
@@ -63,13 +64,17 @@ def init_observability(app, service_name):
     my_id = instance_id(service_name)
     started_at = time.time()
     counter = {"requests": 0}
+    active_requests = {"count": 0}
+    lock = threading.Lock()
 
     @app.before_request
     def request_arrived():
         g.request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
         g.started = time.time()
         if request.path not in ("/status", "/health"):  # don't count/log the health checks
-            counter["requests"] += 1
+            with lock:
+                counter["requests"] += 1
+                active_requests["count"] += 1
             log.info("--> %s %s", request.method, request.full_path.rstrip("?"))
 
     @app.after_request
@@ -78,18 +83,34 @@ def init_observability(app, service_name):
         response.headers["X-Instance-Id"] = my_id
         if request.path not in ("/status", "/health"):
             took_ms = round((time.time() - g.started) * 1000)
+            with lock:
+                active_requests["count"] = max(0, active_requests["count"] - 1)
             log.info("<-- %s %s %s (%s ms)", request.method, request.path, response.status_code, took_ms)
         return response
 
     @app.get("/status")
     def status():
-        """Is this instance alive? Same answer shape in every service."""
+        """Is this instance alive? Same answer shape in every service.
+
+        Includes load metrics (CPU, memory, active requests) so the Service
+        Discovery can detect critical load (grade 8)."""
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory = psutil.virtual_memory()
+        with lock:
+            active = active_requests["count"]
+            total = counter["requests"]
         return jsonify({
             "service": service_name,
             "instance_id": my_id,
             "status": "UP",
             "uptime_seconds": round(time.time() - started_at),
-            "requests_total": counter["requests"],
+            "requests_total": total,
+            "load": {
+                "cpu_percent": cpu_percent,
+                "memory_percent": memory.percent,
+                "memory_used_mb": round(memory.used / (1024 * 1024)),
+                "active_requests": active,
+            },
         }), 200
 
     return log
