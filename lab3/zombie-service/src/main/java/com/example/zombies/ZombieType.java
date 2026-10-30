@@ -24,7 +24,7 @@ public class ZombieType implements Persistable<String> {
     //  isecond one (-> 409 in ApiExceptionHandler) no matter which instance handled it.
     @Transient
     @JsonIgnore
-    private booleansNew = true;
+    private boolean isNew = true;
 
     @Override
     @JsonIgnore
