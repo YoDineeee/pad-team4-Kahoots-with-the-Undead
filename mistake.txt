@@ -1,0 +1,3 @@
+so our mistake that we didnt make the subdirectory for the services like in repository of dima
+https://github.com/DimonBel/PAD-team1  so each server like a link  (example:game-server@51f4b99 as an example)
+
