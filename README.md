@@ -83,16 +83,21 @@ graph TD
 
 | Service | Language/Framework | Communication Style | Justification & Trade-offs |
 |---------|-------------------|-------------------|---------------------------|
-| Player Service | TBD | REST | User data, auth - needs strong validation and consistency |
-| Game Service | TBD (Node.js preferred) | WebSockets + REST | Real-time event loop ideal for concurrent connections and timed actions |
-| Exam Service | TBD | REST + Events | Emits `ExamPassed` events to other services |
-| World Service | TBD | REST | Map data, mostly static with updates |
-| Zombie Service | TBD | REST | Zombie configs and stats |
-| Resource Service | TBD | REST | Idempotent operations require strong transactional guarantees |
-| Base Service | TBD | REST | Base state management |
-| Crafting Service | TBD | REST | Atomic operations, complex validation |
+| Player Service | Python (FastAPI) | REST | Auth and profile data require strong validation and transactional consistency; FastAPI's Pydantic models and async support fit. |
+| Game Service | Node.js (Express + Socket.IO) | WebSockets + REST | Real-time day/night cycle, timers and concurrent connections suit the event loop; WebSockets for live updates. |
+| Exam Service | Python (FastAPI) | REST + Events (RabbitMQ) | Exam attempts/grades need strong validation; emits `ExamPassed` event to World/Player via broker. |
+| World Service | Node.js (Express) | REST | Map/room data mostly static with updates; lightweight JS service. |
+| Zombie Service | Python (FastAPI) | REST | Zombie configs and stats; shares language with Player/Exam for consistency. |
+| Resource Service | Python (FastAPI) | REST | Idempotent apply/consume requires strong transactional guarantees; FastAPI + SQLAlchemy. |
+| Base Service | Node.js (Express) | REST | Base state and upgrades; shares language with Game/World. |
+| Crafting Service | Python (FastAPI) | REST | Atomic crafting with complex validation; idempotent `actionId`. |
 
-*Team will decide specific languages (minimum 2 across team) in Team Definition.*
+**Languages (2):** Python (FastAPI) and Node.js (Express). At least 2 languages across the team as required.
+
+**Communication patterns:**
+- Synchronous REST for queries/commands between services.
+- WebSocket (Socket.IO) for Game Service real-time events (day/night, timers, zombie behavior).
+- Message broker (RabbitMQ) for async events: `ExamPassed`, `ActionCompleted`, resource applied.
 
 ## Data Management
 - **Database per service** pattern
