@@ -106,62 +106,179 @@ graph TD
 
 ## Communication Contract
 
+### Data Management
+- **Database per service**: each service owns its own database; no shared tables.
+- **Access through APIs/events only**: services never read each other's databases.
+- **Databases**: PostgreSQL (Player, Exam, Resource, Base), MongoDB (World, Zombie, Crafting), Redis (Game session state).
+- **Idempotency**: Resource and Crafting operations use `actionId` to prevent duplicate application.
+- **Atomicity**: Crafting uses saga/transactional pattern across Resource + Player services.
+
 ### API Endpoints
 
 #### Player Service
 ```
 POST /players/register
-Request: { "username": "string", "email": "string", "password": "string" }
-Response 200: { "playerId": "uuid", "token": "string" }
+Request:  { "username": "string", "email": "string", "password": "string" }
+Response 201: { "playerId": "uuid", "token": "jwt" }
+Response 409: { "error": "username or email already in use" }
+
+POST /players/login
+Request:  { "email": "string", "password": "string" }
+Response 200: { "playerId": "uuid", "token": "jwt" }
 
 GET /players/:id
-Response 200: { "playerId": "uuid", "username": "string", "level": "int", "xp": "int", "inventory": [] }
+Response 200: { "playerId": "uuid", "username": "string", "level": "int", "xp": "int", "inventory": ["itemId"] }
+
+PUT /players/:id/xp
+Request:  { "amount": "int", "reason": "string" }
+Response 200: { "level": "int", "xp": "int" }
+
+GET /players/:id/friends
+Response 200: { "friends": ["playerId"] }
+
+POST /players/:id/friends
+Request:  { "friendId": "uuid" }
+Response 201: { "status": "added" }
+
+POST /players/:id/inventory
+Request:  { "itemId": "uuid", "actionId": "uuid" }
+Response 200: { "status": "added", "inventory": [...] }
+```
+
+#### Game Service
+```
+POST /games/sessions
+Request:  { "hostId": "uuid", "maxPlayers": "int" }
+Response 201: { "sessionId": "uuid", "code": "string" }
+
+POST /games/sessions/:id/join
+Request:  { "playerId": "uuid" }
+Response 200: { "sessionId": "uuid", "players": ["playerId"] }
+
+POST /games/sessions/:id/start
+Response 200: { "status": "started", "cycle": "day|night" }
+
+GET /games/sessions/:id
+Response 200: { "sessionId": "uuid", "state": "lobby|active|ended", "cycle": "day|night", "timer": "int" }
+
+POST /games/sessions/:id/action
+Request:  { "playerId": "uuid", "actionId": "uuid", "action": "scavenge", "nodeId": "uuid", "duration": "int" }
+Response 202: { "status": "started", "endsAt": "ISO8601" }
+```
+
+#### Exam Service
+```
+GET /exams
+Response 200: { "exams": [{"examId": "uuid", "title": "string", "minLevel": "int"}] }
+
+POST /exams/start
+Request:  { "playerId": "uuid", "examId": "uuid" }
+Response 200: { "attemptId": "uuid", "questions": [{"qid": "uuid", "text": "string"}] }
+
+POST /exams/submit
+Request:  { "attemptId": "uuid", "answers": [{"qid": "uuid", "answer": "string"}] }
+Response 200: { "passed": "bool", "score": "int" }
+// Emits ExamPassed event if passed
+
+GET /exams/:id/achievements/:playerId
+Response 200: { "achievements": [{"id": "uuid", "name": "string"}] }
+```
+
+#### World Service
+```
+GET /world/map
+Response 200: { "rooms": [{"roomId": "uuid", "name": "string", "wing": "string", "unlocked": "bool"}], "nodes": [...], "spawns": [...] }
+
+GET /world/rooms/:id
+Response 200: { "roomId": "uuid", "name": "string", "wing": "string", "unlocked": "bool", "zombieSpawnPoints": ["uuid"] }
+
+POST /world/rooms/:id/unlock
+Request:  { "playerId": "uuid", "actionId": "uuid" }
+Response 200: { "status": "unlocked", "room": {...} }
+
+GET /world/nodes/:id
+Response 200: { "nodeId": "uuid", "resource": "string", "amount": "int", "roomId": "uuid" }
+```
+
+#### Zombie Service
+```
+GET /zombies/types
+Response 200: { "types": [{"typeId": "uuid", "name": "Professor|Tourist|Custom", "stats": {"hp": "int", "damage": "int", "speed": "int"}}] }
+
+GET /zombies/types/:id
+Response 200: { "typeId": "uuid", "name": "string", "stats": {...} }
+
+POST /zombies/types
+Request:  { "name": "string", "stats": {"hp": "int", "damage": "int", "speed": "int"} }
+Response 201: { "typeId": "uuid" }
 ```
 
 #### Resource Service
 ```
 POST /resources/apply
-Request: { "playerId": "uuid", "actionId": "uuid", "resource": "food", "amount": 12 }
+Request:  { "playerId": "uuid", "actionId": "uuid", "resource": "food", "amount": 12 }
 Response 200: { "status": "applied", "newBalance": 40 }
-Response 409: { "error": "action already applied" } // idempotency
+Response 409: { "error": "action already applied" }  // idempotency
 
 POST /resources/consume
-Request: { "playerId": "uuid", "actionId": "uuid", "resource": "wood", "amount": 5 }
+Request:  { "playerId": "uuid", "actionId": "uuid", "resource": "wood", "amount": 5 }
 Response 200: { "status": "consumed", "newBalance": 15 }
+Response 409: { "error": "action already processed" }
+
+GET /resources/:playerId/balance
+Response 200: { "balances": {"food": "int", "wood": "int", "metal": "int"} }
 ```
 
-#### Exam Service
+#### Base Service
 ```
-POST /exams/start
-Request: { "playerId": "uuid", "examId": "uuid" }
-Response 200: { "attemptId": "uuid", "questions": [] }
+GET /base/:playerId
+Response 200: { "playerId": "uuid", "rooms": [...], "facilities": [...], "storageCapacity": "int", "kiki": {"present": "bool", "happiness": "int"} }
 
-POST /exams/submit
-Request: { "attemptId": "uuid", "answers": [] }
-Response 200: { "passed": true, "score": 85 }
-// Emits ExamPassed event if passed
+POST /base/upgrade
+Request:  { "playerId": "uuid", "actionId": "uuid", "roomId": "string", "upgradeType": "string" }
+Response 200: { "status": "upgraded", "cost": {...}, "newState": {...} }
+Response 409: { "error": "insufficient resources" }
+
+POST /base/barricade
+Request:  { "playerId": "uuid", "actionId": "uuid", "roomId": "string" }
+Response 200: { "status": "barricaded", "resourcesConsumed": {...} }
+
+POST /base/kiki/interact
+Request:  { "playerId": "uuid", "actionId": "uuid" }
+Response 200: { "reward": {...}, "type": "booster|item" }
 ```
 
 #### Crafting Service
 ```
+GET /craft/recipes
+Query:    ?playerId=uuid
+Response 200: { "recipes": [{"recipeId": "uuid", "name": "string", "ingredients": [{"resource": "string", "amount": "int"}], "result": {...}, "unlocked": "bool"}] }
+
+GET /craft/recipes/:recipeId
+Response 200: { "recipeId": "uuid", "name": "string", "ingredients": [...], "result": {...}, "requirements": {...} }
+
 POST /craft/recipe/:recipeId
-Request: { "playerId": "uuid", "actionId": "uuid" }
-Response 200: { "status": "crafted", "item": {...} }
-// Atomic: consumes resources, adds item to player
+Request:  { "playerId": "uuid", "actionId": "uuid" }
+Response 200: { "status": "crafted", "item": {...}, "inventoryUpdated": "bool" }
+Response 400: { "error": "missing materials" }
+Response 403: { "error": "recipe locked" }
+Response 409: { "error": "action already processed" }
 ```
 
 ### WebSocket Messages (Game Service)
 ```json
 {
-  "type": "day_start|night_start|zombie_spawn|timer_update",
-  "payload": {...}
+  "type": "day_start|night_start|zombie_spawn|timer_update|action_complete",
+  "payload": { "sessionId": "uuid", "timer": "int", "zombies": [...] }
 }
 ```
 
-### Events
+### Events (via RabbitMQ)
 - **ExamPassed**: `{ "eventType": "ExamPassed", "playerId": "uuid", "examId": "uuid", "timestamp": "ISO8601", "rewards": {...} }`
 - **ActionCompleted**: `{ "eventType": "ActionCompleted", "actionId": "uuid", "playerId": "uuid", "result": {...} }`
+- **ResourceApplied**: `{ "eventType": "ResourceApplied", "playerId": "uuid", "actionId": "uuid", "resource": "string", "amount": "int", "newBalance": "int" }`
 
+## Contribution Guidelines
 ## Contribution Guidelines
 
 ### Branches
