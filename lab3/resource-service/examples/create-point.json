@@ -1,0 +1,6 @@
+{
+  "room_id": "lab-204",
+  "resource": "metal-01",
+  "amount": 10,
+  "max_amount": 30
+}

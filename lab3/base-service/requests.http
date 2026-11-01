@@ -1,0 +1,72 @@
+### Open in VS Code (REST Client extension) or IntelliJ and click "Send Request".
+### Replace BASE_ID with the base_id returned by "Create a base".
+
+@base = http://localhost:5007
+@baseId = BASE_ID
+
+
+### Create a base (send twice: the second call returns the same base)
+POST {{base}}/api/bases
+Authorization: Bearer service-token
+Content-Type: application/json
+
+{ "event_id": "evt-uuid-base-001", "lobby_id": "lobby-uuid-789", "map_id": "map-uuid-001", "home_room_id": "faf-cab" }
+
+### Get base by lobby
+GET {{base}}/api/bases?lobby_id=lobby-uuid-789
+Authorization: Bearer service-token
+
+### Get a base
+GET {{base}}/api/bases/{{baseId}}
+Authorization: Bearer player-token
+
+### Rename a base
+PATCH {{base}}/api/bases/{{baseId}}
+Authorization: Bearer player-token
+Content-Type: application/json
+
+{ "name": "Fortress Cab" }
+
+### Annex a room (try "hallway-3" to get 409: not cleared)
+POST {{base}}/api/bases/{{baseId}}/rooms
+Authorization: Bearer service-token
+Content-Type: application/json
+
+{ "event_id": "evt-uuid-annex-001", "room_id": "lab-a1", "player_id": "player-uuid-123" }
+
+### List rooms
+GET {{base}}/api/bases/{{baseId}}/rooms
+Authorization: Bearer player-token
+
+### Build / reinforce barricade
+POST {{base}}/api/bases/{{baseId}}/rooms/lab-a1/barricade
+Authorization: Bearer service-token
+Content-Type: application/json
+
+{ "event_id": "evt-uuid-barricade-001", "player_id": "player-uuid-123", "kit_item_id": null }
+
+### Zombie damage
+PATCH {{base}}/api/bases/{{baseId}}/rooms/lab-a1/barricade
+Authorization: Bearer service-token
+Content-Type: application/json
+
+{ "event_id": "evt-uuid-attack-042", "operation": "damage", "amount": 30 }
+
+### Get barricade
+GET {{base}}/api/bases/{{baseId}}/rooms/lab-a1/barricade
+Authorization: Bearer player-token
+
+### Destroy barricade
+DELETE {{base}}/api/bases/{{baseId}}/rooms/lab-a1/barricade
+Authorization: Bearer service-token
+
+### Remove a room
+DELETE {{base}}/api/bases/{{baseId}}/rooms/lab-a1
+Authorization: Bearer service-token
+
+### Delete the base
+DELETE {{base}}/api/bases/{{baseId}}
+Authorization: Bearer service-token
+
+
+

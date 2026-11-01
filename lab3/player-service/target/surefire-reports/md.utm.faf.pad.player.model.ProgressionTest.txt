@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: md.utm.faf.pad.player.model.ProgressionTest
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.314 s -- in md.utm.faf.pad.player.model.ProgressionTest
