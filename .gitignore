@@ -1,6 +1,8 @@
 # Environment
 .venv
 .venv.local
+.kilo/
+
 
 # Dependencies
 node_modules/

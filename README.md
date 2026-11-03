@@ -266,6 +266,15 @@ Response 200: { "status": "barricaded", "resourcesConsumed": {...} }
 POST /base/kiki/interact
 Request:  { "playerId": "uuid", "actionId": "uuid" }
 Response 200: { "reward": {...}, "type": "booster|item" }
+
+PUT /base/:playerId
+Request:  { "rooms": [...], "facilities": [...], "storageCapacity": "int", "kikiPresent": "bool", "kikiHappiness": "int" }
+Response 200: { "playerId": "uuid", "status": "updated" }
+Response 404: { "error": "base not found" }
+
+DELETE /base/:playerId
+Response 200: { "playerId": "uuid", "status": "deleted" }
+Response 404: { "error": "base not found" }
 ```
 
 #### Crafting Service
@@ -276,6 +285,19 @@ Response 200: { "recipes": [{"recipeId": "uuid", "name": "string", "ingredients"
 
 GET /craft/recipes/:recipeId
 Response 200: { "recipeId": "uuid", "name": "string", "ingredients": [...], "result": {...}, "requirements": {...} }
+
+POST /craft/recipes
+Request:  { "name": "string", "ingredients": [...], "result": {...}, "requirements": {...} }
+Response 201: { "recipeId": "uuid", "status": "created" }
+
+PUT /craft/recipes/:recipeId
+Request:  { "name": "string", "ingredients": [...], "result": {...}, "requirements": {...} }
+Response 200: { "recipeId": "uuid", "status": "updated" }
+Response 404: { "error": "recipe not found" }
+
+DELETE /craft/recipes/:recipeId
+Response 200: { "recipeId": "uuid", "status": "deleted" }
+Response 404: { "error": "recipe not found" }
 
 POST /craft/recipe/:recipeId
 Request:  { "playerId": "uuid", "actionId": "uuid" }
@@ -325,8 +347,25 @@ See `.github/pull_request_template.md`
 Follow [Conventional Commits](https://www.conventionalcommits.org/)
 
 ### Test Coverage
-Target: 70%
+Target: 80%
 
 ### Versioning
 Semantic Versioning (SemVer) - tags like `v1.0.0`
 
+
+
+## Docker Images
+- DockerHub: https://hub.docker.com/r/yodineeee/base-service (tag 1.0.0)
+- DockerHub: https://hub.docker.com/r/yodineeee/crafting-service (tag 1.0.0)
+
+## Requirements for running
+- Docker 24+ (or Docker Desktop)
+- docker compose v2
+- Environment variables: BASE_DB_PASSWORD, CRAFTING_DB_PASSWORD (see .env.example)
+- Ports: 5001 (base-service), 5002 (crafting-service), 5433/5434 (databases)
+
+## Running
+```bash
+cp .env.example .env
+docker compose up
+```

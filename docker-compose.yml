@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   base-db:
@@ -6,9 +5,11 @@ services:
     environment:
       POSTGRES_DB: base_db
       POSTGRES_USER: base
-      POSTGRES_PASSWORD: ${BASE_DB_PASSWORD:-basepass}
+      POSTGRES_PASSWORD: ${BASE_DB_PASSWORD:?set in .env}
     ports:
       - "5433:5432"
+    volumes:
+      - base_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U base -d base_db"]
       interval: 5s
@@ -16,13 +17,13 @@ services:
       retries: 10
 
   base-service:
-    build: ./services/base-service
+    image: yodineeee/base-service:1.0.0
     environment:
       DB_HOST: base-db
       DB_PORT: 5432
       DB_NAME: base_db
       DB_USER: base
-      DB_PASSWORD: ${BASE_DB_PASSWORD:-basepass}
+      DB_PASSWORD: ${BASE_DB_PASSWORD:?set in .env}
       PORT: 5001
     ports:
       - "5001:5001"
@@ -35,9 +36,11 @@ services:
     environment:
       POSTGRES_DB: crafting_db
       POSTGRES_USER: crafting
-      POSTGRES_PASSWORD: ${CRAFTING_DB_PASSWORD:-craftingpass}
+      POSTGRES_PASSWORD: ${CRAFTING_DB_PASSWORD:?set in .env}
     ports:
       - "5434:5432"
+    volumes:
+      - crafting_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U crafting -d crafting_db"]
       interval: 5s
@@ -45,16 +48,20 @@ services:
       retries: 10
 
   crafting-service:
-    build: ./services/crafting-service
+    image: yodineeee/crafting-service:1.0.0
     environment:
       DB_HOST: crafting-db
       DB_PORT: 5432
       DB_NAME: crafting_db
       DB_USER: crafting
-      DB_PASSWORD: ${CRAFTING_DB_PASSWORD:-craftingpass}
+      DB_PASSWORD: ${CRAFTING_DB_PASSWORD:?set in .env}
       PORT: 5002
     ports:
       - "5002:5002"
     depends_on:
       crafting-db:
         condition: service_healthy
+
+volumes:
+  base_pgdata:
+  crafting_pgdata:
