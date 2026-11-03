@@ -1,6 +1,11 @@
 [submodule "services/base-service"]
 	path = services/base-service
-	url = /home/dhia/Desktop/University/base-service-repo
+	url = https://github.com/YoDineeee/base-server.git
+
 [submodule "services/crafting-service"]
 	path = services/crafting-service
-	url = /home/dhia/Desktop/University/crafting-service-repo
+	url = https://github.com/YoDineeee/crafting-service.git
+
+[submodule "services/service-discovery"]
+	path = services/service-discovery
+	url = https://github.com/YoDineeee/service-discovery.git
