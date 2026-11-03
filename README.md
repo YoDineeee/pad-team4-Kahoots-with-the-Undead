@@ -89,7 +89,9 @@ graph TD
 | World Service | Node.js (Express) | REST | Map/room data mostly static with updates; lightweight JS service. |
 | Zombie Service | Python (Flask) | REST | Zombie configs and stats; shares language with Player/Exam for consistency. |
 | Resource Service | Python (Flask) | REST | Idempotent apply/consume requires strong transactional guarantees; Flask + SQLAlchemy. |
-| Base Service | Node.js (Express) | REST | Base state and upgrades; shares language with Game/World. |
+| Base Service | Python (Flask) | REST | Base state and upgrades; Flask + PostgreSQL. |
+
+
 | Crafting Service | Python (Flask) | REST | Atomic crafting with complex validation; idempotent `actionId`. |
 
 **Languages (2):** Python (Flask) and Node.js (Express). At least 2 languages across the team as required.
@@ -120,7 +122,7 @@ graph TD
 cp .env.example .env
 docker compose up --build
 ```
-Open http://localhost:5001/health and http://localhost:5002/health. Both should return `{"db":"up","status":"ok"}`. Import the Postman collections in `postman/`.
+Open http://localhost:5001/health and http://localhost:5002/health. Both should return `{"db":"up","status":"ok"}`. Import the Postman collections in `docs/postman/`.
 
 ## Communication Contract
 

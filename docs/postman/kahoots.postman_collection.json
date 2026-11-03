@@ -1,0 +1,259 @@
+{
+  "info": {
+    "_postman_id": "lab0-kahoots-health-and-contract-requests",
+    "name": "Kahoots with the Undead - Lab 0",
+    "description": "Import and run Health requests for Base and Crafting services. Rest are Lab 1 contract samples.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Base Service Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5001/health",
+          "host": [
+            "localhost"
+          ],
+          "port": 5001,
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Crafting Service Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5002/health",
+          "host": [
+            "localhost"
+          ],
+          "port": 5002,
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Base Service Create Base (Lab 1)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"playerId\": \"player-1\"}"
+        },
+        "url": {
+          "raw": "http://localhost:5001/bases",
+          "host": [
+            "localhost"
+          ],
+          "port": 5001,
+          "path": [
+            "bases"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Base Service Get Base (Lab 1)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5001/bases/player-1",
+          "host": [
+            "localhost"
+          ],
+          "port": 5001,
+          "path": [
+            "bases",
+            "player-1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Base Service Barricade (Lab 1)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"actionId\": \"action-1\", \"roomId\": \"cab\"}"
+        },
+        "url": {
+          "raw": "http://localhost:5001/bases/player-1/barricade",
+          "host": [
+            "localhost"
+          ],
+          "port": 5001,
+          "path": [
+            "bases",
+            "player-1",
+            "barricade"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Base Service Upgrade (Lab 1)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"actionId\": \"action-2\", \"roomId\": \"cab\", \"upgradeType\": \"level\"}"
+        },
+        "url": {
+          "raw": "http://localhost:5001/bases/player-1/upgrade",
+          "host": [
+            "localhost"
+          ],
+          "port": 5001,
+          "path": [
+            "bases",
+            "player-1",
+            "upgrade"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Base Service Kiki Interact (Lab 1)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"actionId\": \"action-3\"}"
+        },
+        "url": {
+          "raw": "http://localhost:5001/bases/player-1/kiki/interact",
+          "host": [
+            "localhost"
+          ],
+          "port": 5001,
+          "path": [
+            "bases",
+            "player-1",
+            "kiki",
+            "interact"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Crafting Service List Recipes (Lab 1)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5002/craft/recipes?playerId=player-1",
+          "host": [
+            "localhost"
+          ],
+          "port": 5002,
+          "path": [
+            "craft",
+            "recipes"
+          ],
+          "query": [
+            {
+              "key": "playerId",
+              "value": "player-1"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Crafting Service Get Recipe (Lab 1)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5002/craft/recipes/r1",
+          "host": [
+            "localhost"
+          ],
+          "port": 5002,
+          "path": [
+            "craft",
+            "recipes",
+            "r1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Crafting Service Craft Recipe (Lab 1)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"playerId\": \"player-1\", \"actionId\": \"craft-1\", \"level\": 1}"
+        },
+        "url": {
+          "raw": "http://localhost:5002/craft/recipe/r1",
+          "host": [
+            "localhost"
+          ],
+          "port": 5002,
+          "path": [
+            "craft",
+            "recipe",
+            "r1"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
