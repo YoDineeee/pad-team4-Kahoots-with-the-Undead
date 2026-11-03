@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  base-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: base_db
+      POSTGRES_USER: base
+      POSTGRES_PASSWORD: ${BASE_DB_PASSWORD:-basepass}
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U base -d base_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  base-service:
+    build: ./services/base-service
+    environment:
+      DB_HOST: base-db
+      DB_PORT: 5432
+      DB_NAME: base_db
+      DB_USER: base
+      DB_PASSWORD: ${BASE_DB_PASSWORD:-basepass}
+      PORT: 5001
+    ports:
+      - "5001:5001"
+    depends_on:
+      base-db:
+        condition: service_healthy
+
+  crafting-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: crafting_db
+      POSTGRES_USER: crafting
+      POSTGRES_PASSWORD: ${CRAFTING_DB_PASSWORD:-craftingpass}
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crafting -d crafting_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  crafting-service:
+    build: ./services/crafting-service
+    environment:
+      DB_HOST: crafting-db
+      DB_PORT: 5432
+      DB_NAME: crafting_db
+      DB_USER: crafting
+      DB_PASSWORD: ${CRAFTING_DB_PASSWORD:-craftingpass}
+      PORT: 5002
+    ports:
+      - "5002:5002"
+    depends_on:
+      crafting-db:
+        condition: service_healthy
