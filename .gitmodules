@@ -1,0 +1,6 @@
+[submodule "services/base-service"]
+	path = services/base-service
+	url = /home/dhia/Desktop/University/base-service-repo
+[submodule "services/crafting-service"]
+	path = services/crafting-service
+	url = /home/dhia/Desktop/University/crafting-service-repo
