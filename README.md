@@ -83,16 +83,16 @@ graph TD
 
 | Service | Language/Framework | Communication Style | Justification & Trade-offs |
 |---------|-------------------|-------------------|---------------------------|
-| Player Service | Python (FastAPI) | REST | Auth and profile data require strong validation and transactional consistency; FastAPI's Pydantic models and async support fit. |
+| Player Service | Python (Flask) | REST | Auth and profile data require strong validation and transactional consistency; Flask + Pydantic models and async support fit. |
 | Game Service | Node.js (Express + Socket.IO) | WebSockets + REST | Real-time day/night cycle, timers and concurrent connections suit the event loop; WebSockets for live updates. |
-| Exam Service | Python (FastAPI) | REST + Events (RabbitMQ) | Exam attempts/grades need strong validation; emits `ExamPassed` event to World/Player via broker. |
+| Exam Service | Python (Flask) | REST + Events (RabbitMQ) | Exam attempts/grades need strong validation; emits `ExamPassed` event to World/Player via broker. |
 | World Service | Node.js (Express) | REST | Map/room data mostly static with updates; lightweight JS service. |
-| Zombie Service | Python (FastAPI) | REST | Zombie configs and stats; shares language with Player/Exam for consistency. |
-| Resource Service | Python (FastAPI) | REST | Idempotent apply/consume requires strong transactional guarantees; FastAPI + SQLAlchemy. |
+| Zombie Service | Python (Flask) | REST | Zombie configs and stats; shares language with Player/Exam for consistency. |
+| Resource Service | Python (Flask) | REST | Idempotent apply/consume requires strong transactional guarantees; Flask + SQLAlchemy. |
 | Base Service | Node.js (Express) | REST | Base state and upgrades; shares language with Game/World. |
-| Crafting Service | Python (FastAPI) | REST | Atomic crafting with complex validation; idempotent `actionId`. |
+| Crafting Service | Python (Flask) | REST | Atomic crafting with complex validation; idempotent `actionId`. |
 
-**Languages (2):** Python (FastAPI) and Node.js (Express). At least 2 languages across the team as required.
+**Languages (2):** Python (Flask) and Node.js (Express). At least 2 languages across the team as required.
 
 **Communication patterns:**
 - Synchronous REST for queries/commands between services.
@@ -103,6 +103,24 @@ graph TD
 - **Database per service** pattern
 - Services access each other's data **only through APIs/events**
 - Possible DB choices: PostgreSQL (Player/Exam), MongoDB (World/Zombie), Redis (Game session state)
+
+
+## Tooling
+
+| Tool | Purpose |
+|------|---------|
+| Git | Version control |
+| Docker Desktop | Container runtime for local stack |
+| Python 3.12 | Service runtime (Flask) |
+| Postman | API testing |
+| PostgreSQL 16 | Per-service databases |
+
+## Running locally
+```bash
+cp .env.example .env
+docker compose up --build
+```
+Open http://localhost:5001/health and http://localhost:5002/health. Both should return `{"db":"up","status":"ok"}`. Import the Postman collections in `postman/`.
 
 ## Communication Contract
 
